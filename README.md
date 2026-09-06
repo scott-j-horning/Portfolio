@@ -10,5 +10,6 @@ Verify: https://vrfy.digital/mnsfg2b
 | Folder | Problem |
 | --- | --- |
 | [01-foodhub-eda](01-foodhub-eda/) | FoodHub aggregator EDA |
+| [02-enews-ab-test](02-enews-ab-test/) | E-News Express landing-page A/B test |
 
 Datasets are omitted from this repo.
