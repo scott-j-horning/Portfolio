@@ -1,7 +1,7 @@
 # Scott Horning — DSBA portfolio
 
-PGP in Data Science and Business Analytics (May–Dec 2023; certificate Jan 2024).
-UT Austin McCombs / TEE + Great Learning. Certificate of completion — not a UT degree.
+Post Graduate Program in Data Science and Business Analytics (May–Dec 2023; certificate Jan 2024).
+UT Austin McCombs / Texas Executive Education + Great Learning.
 
 Verify: https://www.mygreatlearning.com/certificate/SYVFOOSP
 
