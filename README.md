@@ -13,5 +13,6 @@ Verify: https://www.mygreatlearning.com/certificate/SYVFOOSP
 | [02-enews-ab-test](02-enews-ab-test/) | E-News Express landing-page A/B test |
 | [03-recell-pricing](03-recell-pricing/) | ReCell used-device pricing (OLS) |
 | [04-inn-hotels-cancellation](04-inn-hotels-cancellation/) | INN Hotels booking cancellation |
+| [05-easyvisa-classification](EasyVisa OFLC case-status classification ensembles/) | Easy Visa case status Classification |
 
 Datasets are omitted from this repo.
