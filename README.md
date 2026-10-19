@@ -14,5 +14,6 @@ Verify: https://www.mygreatlearning.com/certificate/SYVFOOSP
 | [03-recell-pricing](03-recell-pricing/) | ReCell used-device pricing (OLS) |
 | [04-inn-hotels-cancellation](04-inn-hotels-cancellation/) | INN Hotels booking cancellation |
 | [05-easyvisa-classification](05-easyvisa-classification/) | EasyVisa OFLC case-status classification (ensembles) |
+| [06-renewind-tuning](06-renewind-tuning/)                 | ReneWind generator-failure prediction (tuned XGBoost) |
 
 Datasets are omitted from this repo.
