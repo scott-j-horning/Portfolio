@@ -15,5 +15,6 @@ Verify: https://www.mygreatlearning.com/certificate/SYVFOOSP
 | [04-inn-hotels-cancellation](04-inn-hotels-cancellation/) | INN Hotels booking cancellation |
 | [05-easyvisa-classification](05-easyvisa-classification/) | EasyVisa OFLC case-status classification (ensembles) |
 | [06-renewind-tuning](06-renewind-tuning/)                 | ReneWind generator-failure prediction (tuned XGBoost) |
+| [07-trade-ahead](07-trade-ahead/) | Trade&Ahead NYSE stock clustering (K-means and Hierarchical) |
 
 Datasets are omitted from this repo.
