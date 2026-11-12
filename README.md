@@ -1,8 +1,7 @@
+# Scott Horning — DSBA portfolio
 
-# Scott Horning â€” DSBA portfolio
-
-Post Graduate Program in Data Science and Business Analytics (Mayâ€“Dec 2023; certificate Jan 2024).
-UT Austin McCombs / Texas Executive Education + Great Learning. 
+Post Graduate Program in Data Science and Business Analytics (May–Dec 2023; certificate Jan 2024).  
+UT Austin McCombs / Texas Executive Education + Great Learning.  
 
 Verify: https://www.mygreatlearning.com/certificate/SYVFOOSP
 
@@ -20,5 +19,6 @@ Certificate Program in Advanced Python: From Analytics to AI (Great Learning). C
 | [06-renewind-tuning](06-renewind-tuning/) | ReneWind generator-failure prediction (tuned XGBoost) |
 | [07-trade-ahead](07-trade-ahead/) | Trade&Ahead NYSE stock clustering (K-means and Hierarchical) |
 | [08-finsights-10k-rag](08-finsights-10k-rag/) | Finsights Grey Retrieval-Augmented Generation over five 2023 10-Ks (Chroma, Gradio) |
-| [09-avall-ntsb](https://app.powerbi.com/view?r=eyJrIjoiYTY3OWZkNGEtZjk5Yi00ZTVhLWE0YWEtODE1YzA5NGNhYzEzIiwidCI6ImMzMTU4NjgwLTU2OGQtNDNjYi1iYTJjLTU0NzQyOTNiNDQ5OSJ9) | AVALL â€” NTSB aviation accidents through a Perrow lens (Power BI) |
+| [09-avall-ntsb](09-avall-ntsb/) | AVALL — NTSB aviation accidents through a Perrow lens (Power BI) |
+
 Datasets are omitted from this repo.
