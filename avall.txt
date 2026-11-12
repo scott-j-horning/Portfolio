@@ -1,0 +1,1019 @@
+#C1
+# Mount Drive Short
+from google.colab import drive
+from pathlib import Path
+drive.mount('/content/drive', force_remount=True)
+%cd "./drive/MyDrive/Colab Notebooks/"
+
+!ls
+
+ #C2
+ #print the mark down table of contents.
+ #Use to keep logical directon
+
+import json
+
+
+NB = Path("AVALL.ipynb")
+
+nb = json.loads(NB.read_text())
+
+for i, cell in enumerate(nb["cells"]):
+    if cell["cell_type"] != "markdown":
+        continue
+    src = "".join(cell.get("source") or []).strip()
+    if not src:
+        continue
+    first = src.splitlines()[0].rstrip()
+    hashes = 0
+    for ch in first:
+        if ch == "#":
+            hashes = hashes + 1
+        else:
+            break
+    level = hashes if hashes > 0 else 0
+    indent = "  " * max(level - 1, 0)
+    print(f"{i:03d}  {indent}{first[:100]}")
+    
+ #C3
+#  Libraries to help with reading and manipulating data
+import pandas as pd
+import numpy as np
+
+# Libaries to help with data visualization
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# To tune model, get different metric scores, and split data
+from sklearn.metrics import (
+    f1_score,
+    accuracy_score,
+    recall_score,
+    precision_score,
+    confusion_matrix,
+    roc_auc_score,
+    ConfusionMatrixDisplay,
+)
+from sklearn import metrics
+
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
+
+# To be used for data scaling and one hot encoding
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, OneHotEncoder
+
+# To impute missing values
+from sklearn.impute import SimpleImputer
+
+# To oversample and undersample data
+from imblearn.over_sampling import SMOTE
+from imblearn.under_sampling import RandomUnderSampler
+
+# To do hyperparameter tuning
+from sklearn.model_selection import RandomizedSearchCV
+
+# To be used for creating pipelines and personalizing them
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+
+# To define maximum number of columns to be displayed in a dataframe
+pd.set_option("display.max_columns", None)
+pd.set_option("display.max_rows", None)
+
+# To supress scientific notations for a dataframe
+pd.set_option("display.float_format", lambda x: "%.3f" % x)
+
+# To help with model building
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import (
+    AdaBoostClassifier,
+    GradientBoostingClassifier,
+    RandomForestClassifier,
+    BaggingClassifier,
+)
+from xgboost import XGBClassifier
+
+
+# To suppress warnings
+import warnings
+
+warnings.filterwarnings("ignore")
+
+
+   #C4
+!apt-get update -qq
+!apt-get install -y mdbtools
+!pip install pandas-access -q
+
+#C5
+DD_PATH = "/content/drive/MyDrive/Colab Notebooks/avallDD.json"
+EXPORT_DIR = "/content/drive/MyDrive/Colab Notebooks/avall_export"
+mdb_path = "/content/drive/MyDrive/Colab Notebooks/"
+mdb_path = "avall.mdb"
+
+from pathlib import Path
+CONFIG_PATH = Path.cwd() / "AVALL.cfg"
+
+def load_cfg():
+    cfg = {}
+    if CONFIG_PATH.exists():
+        for line in CONFIG_PATH.read_text().splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                cfg[k.strip()] = v.strip()
+    return cfg
+
+def read_cfg(key):
+    return load_cfg().get(key)
+
+def save_cfg(cfg):
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"{k}={v}" for k, v in cfg.items()]
+    CONFIG_PATH.write_text("\n".join(lines) + "\n")
+
+def write_cfg(key, value):
+    cfg = load_cfg()          # returns {} if the file does not exist
+    cfg[key] = value
+    save_cfg(cfg)             # creates the file
+    
+#C6 — list tables
+import subprocess
+
+tables = subprocess.check_output(["mdb-tables", "-1", mdb_path]).decode().strip().split("\n")
+tables = [t for t in tables if t and not t.startswith("MSys")]
+print(f"{len(tables)} user tables:\n")
+for t in tables:
+    print(t)
+    
+#C7 read the data dictionary from the CAROL website
+import json
+
+raw = Path("/content/drive/MyDrive/Colab Notebooks/avallDD.json").read_text()
+# drop any leading HTTP headers
+start = raw.find("[")
+if start == -1:
+    raise ValueError("No JSON array found")
+dd = json.loads(raw[start:])
+dd_df = pd.DataFrame(dd)
+dd_df.head()
+
+#C8 — dump full schema (DDL)
+schema = subprocess.check_output(["mdb-schema", mdb_path, "mysql"]).decode()
+# print(schema)
+
+schema_path = f"{EXPORT_DIR}/avall_schema.sql"
+with open(schema_path, "w") as f:
+    f.write(schema)
+print(f"Schema written to {schema_path}")
+
+#C9
+import numpy as np
+np.float_ = np.float64   # temporary shim for pandas_access
+import pandas_access as mdb
+
+import subprocess
+import pandas as pd
+
+core_tables = [
+    "events",
+    "aircraft",
+    "narratives",
+    "Findings",
+    "Occurrences",
+    "injury",
+    "Flight_Crew",
+    "engines"
+]
+
+for t in core_tables:
+    csv_path = f"/tmp/{t}.csv"
+    subprocess.run(
+        ["mdb-export", mdb_path, t],
+        stdout=open(csv_path, "w"),
+        check=True
+    )
+    df = pd.read_csv(csv_path, low_memory=False)
+    df.to_parquet(f"{EXPORT_DIR}/{t}.parquet", index=False)
+    print(f"{t}: {df.shape}")
+    
+#C10 — Row counts and date range
+events = pd.read_parquet(f"{EXPORT_DIR}/events.parquet")
+
+print(f"events: {events.shape[0]:,} rows × {events.shape[1]} columns")
+
+# date range (ev_date is the event date)
+events["ev_date"] = pd.to_datetime(events["ev_date"], errors="coerce")
+print(f"Date range: {events['ev_date'].min().date()} to {events['ev_date'].max().date()}")
+print(f"Missing dates: {events['ev_date'].isna().sum()}")
+
+#C11
+
+key_cols = [
+    "ev_id", "ev_date", "ev_city", "ev_state", "ev_country",
+    "latitude", "longitude", "apt_name", "wx_cond_basic",
+    "light_cond", "ev_highest_injury", "inj_tot_f", "inj_tot_s"
+]
+print(events[key_cols].isna().mean().sort_values(ascending=False).to_string())
+
+#C12
+print(events["ev_highest_injury"].value_counts(dropna=False))
+print(events[["inj_tot_f", "inj_tot_s", "inj_tot_m"]].describe())
+
+#C13
+print(events["wx_cond_basic"].value_counts(dropna=False))
+print(events["light_cond"].value_counts(dropna=False))
+
+#C14
+print(f"Missing lat/long: {events[['latitude','longitude']].isna().any(axis=1).mean():.1%}")
+print(events["ev_country"].value_counts().head(10))
+
+#C15 — aircraft overview
+aircraft = pd.read_parquet(f"{EXPORT_DIR}/aircraft.parquet")
+print(f"aircraft: {aircraft.shape[0]:,} rows × {aircraft.shape[1]} columns")
+
+# basic completeness on key columns
+key_acft = [
+    "ev_id", "Aircraft_Key", "acft_make", "acft_model",
+    "acft_category", "num_eng", "homebuilt", "damage",
+    "far_part", "acft_year"
+]
+print(aircraft[key_acft].isna().mean().sort_values(ascending=False))
+
+#C16
+print("acft_category:")
+print(aircraft["acft_category"].value_counts(dropna=False).head(15))
+print()
+
+print("homebuilt:")
+print(aircraft["homebuilt"].value_counts(dropna=False))
+print()
+
+print("far_part:")
+print(aircraft["far_part"].value_counts(dropna=False).head(15))
+
+#C17
+narratives = pd.read_parquet(f"{EXPORT_DIR}/narratives.parquet")
+print(f"narratives: {narratives.shape[0]:,} rows × {narratives.shape[1]} columns")
+
+# coverage vs events
+print(f"Events with a narrative: {narratives['ev_id'].nunique():,} "
+      f"({narratives['ev_id'].nunique() / 31303:.1%})")
+
+# length of the main narrative fields
+for col in ["narr_accp", "narr_accf", "narr_cause", "narr_inc"]:
+    if col in narratives.columns:
+        lengths = narratives[col].fillna("").astype(str).str.len()
+        print(f"{col}: median {lengths.median():.0f}, "
+              f"empty {(lengths == 0).mean():.1%}")
+              
+#C18 — Findings
+findings = pd.read_parquet(f"{EXPORT_DIR}/Findings.parquet")
+print(f"Findings: {findings.shape[0]:,} rows × {findings.shape[1]} columns")
+
+print(f"Events with at least one finding: {findings['ev_id'].nunique():,} "
+      f"({findings['ev_id'].nunique() / 31303:.1%})")
+
+print("\nFindings per event:")
+print(findings.groupby("ev_id").size().describe())
+
+# cause / factor style flags if present
+flag_cols = [c for c in findings.columns if "cause" in c.lower() or "factor" in c.lower() or "cm_inpc" in c.lower()]
+print("\nFlag columns:", flag_cols)
+for c in flag_cols:
+    print(f"\n{c}:")
+    print(findings[c].value_counts(dropna=False).head(10))
+    
+#C19 — injury
+injury = pd.read_parquet(f"{EXPORT_DIR}/injury.parquet")
+print(f"injury: {injury.shape[0]:,} rows × {injury.shape[1]} columns")
+
+print(f"Events with injury detail: {injury['ev_id'].nunique():,} "
+      f"({injury['ev_id'].nunique() / 31303:.1%})")
+
+print("\ninjury_level:")
+print(injury["injury_level"].value_counts(dropna=False))
+
+print("\ninj_person_category:")
+print(injury["inj_person_category"].value_counts(dropna=False))
+
+#C20 — Flight_Crew
+crew = pd.read_parquet(f"{EXPORT_DIR}/Flight_Crew.parquet")
+print(f"Flight_Crew: {crew.shape[0]:,} rows × {crew.shape[1]} columns")
+
+print(f"Events with crew records: {crew['ev_id'].nunique():,} "
+      f"({crew['ev_id'].nunique() / 31303:.1%})")
+
+print("\ncrew_category:")
+print(crew["crew_category"].value_counts(dropna=False).head(10))
+
+print("\ncrew_inj_level:")
+print(crew["crew_inj_level"].value_counts(dropna=False))
+
+#C21 events with no crew record
+no_crew = set(events["ev_id"]) - set(crew["ev_id"])
+print(f"Events missing crew: {len(no_crew):,}")
+
+# highest injury among those events
+print(events.loc[events["ev_id"].isin(no_crew), "ev_highest_injury"].value_counts(dropna=False))
+
+#C23 — engines
+engines = pd.read_parquet(f"{EXPORT_DIR}/engines.parquet")
+print(f"engines: {engines.shape[0]:,} rows × {engines.shape[1]} columns")
+
+print(f"Events with engine records: {engines['ev_id'].nunique():,} "
+      f"({engines['ev_id'].nunique() / 31303:.1%})")
+
+print("\neng_type:")
+print(engines["eng_type"].value_counts(dropna=False).head(10))
+
+print("\nMissing eng_type: "
+      f"{engines['eng_type'].isna().mean():.1%}")
+      
+#C24 — core attributes from events
+fact = events[[
+    "ev_id",
+    "ev_date",
+    "ev_city",
+    "ev_state",
+    "ev_country",
+    "latitude",
+    "longitude",
+    "apt_name",
+    "wx_cond_basic",
+    "light_cond",
+    "ev_highest_injury",
+    "inj_tot_f",
+    "inj_tot_s",
+    "inj_tot_m"
+]].copy()
+
+print(f"fact: {fact.shape[0]:,} rows × {fact.shape[1]} columns")
+fact.head()
+
+#C25 — append aircraft attributes
+acft_cols = aircraft[[
+    "ev_id",
+    "Aircraft_Key",
+    "acft_category",
+    "homebuilt",
+    "far_part",
+    "num_eng"
+]].copy()
+
+# one aircraft row per event for the fact table (first aircraft if multi)
+acft_cols = acft_cols.drop_duplicates(subset="ev_id", keep="first")
+
+fact = fact.merge(acft_cols, on="ev_id", how="left")
+
+print(f"fact: {fact.shape[0]:,} rows × {fact.shape[1]} columns")
+fact.head()
+
+#C26 — append engine type
+eng_cols = engines[[
+    "ev_id",
+    "eng_type"
+]].copy()
+
+# one engine row per event (first engine if multi)
+eng_cols = eng_cols.drop_duplicates(subset="ev_id", keep="first")
+
+fact = fact.merge(eng_cols, on="ev_id", how="left")
+
+print(f"fact: {fact.shape[0]:,} rows × {fact.shape[1]} columns")
+fact[["ev_id", "acft_category", "homebuilt", "far_part", "num_eng", "eng_type"]].head()
+
+#C27 — append Findings summary
+findings_flag = (
+    findings.groupby("ev_id")
+    .agg(
+        finding_count=("finding_no", "count"),
+        has_cause_finding=("Cause_Factor", lambda s: (s == "C").any())
+    )
+    .reset_index()
+)
+
+fact = fact.merge(findings_flag, on="ev_id", how="left")
+fact["finding_count"] = fact["finding_count"].fillna(0).astype(int)
+fact["has_cause_finding"] = fact["has_cause_finding"].fillna(False)
+
+print(f"fact: {fact.shape[0]:,} rows × {fact.shape[1]} columns")
+fact[["ev_id", "finding_count", "has_cause_finding"]].head()
+
+#C28 — append Flight_Crew summary
+crew_flag = (
+    crew.groupby("ev_id")
+    .agg(
+        crew_count=("crew_no", "count"),
+        has_pilot=("crew_category", lambda s: (s == "PLT").any())
+    )
+    .reset_index()
+)
+
+fact = fact.merge(crew_flag, on="ev_id", how="left")
+fact["crew_count"] = fact["crew_count"].fillna(0).astype(int)
+fact["has_pilot"] = fact["has_pilot"].fillna(False)
+
+print(f"fact: {fact.shape[0]:,} rows × {fact.shape[1]} columns")
+fact[["ev_id", "crew_count", "has_pilot"]].head()
+
+#C29 — append narrative presence
+narr_flag = (
+    narratives.groupby("ev_id")
+    .size()
+    .reset_index(name="narrative_count")
+)
+
+fact = fact.merge(narr_flag, on="ev_id", how="left")
+fact["narrative_count"] = fact["narrative_count"].fillna(0).astype(int)
+fact["has_narrative"] = fact["narrative_count"] > 0
+
+print(f"fact: {fact.shape[0]:,} rows × {fact.shape[1]} columns")
+fact[["ev_id", "narrative_count", "has_narrative"]].head()
+
+#C30 — check base fact table
+print(f"fact: {fact.shape[0]:,} rows × {fact.shape[1]} columns\n")
+print("Columns:")
+for col in fact.columns:
+    print(f"  {col}")
+    
+#C31 — depose_design_struct
+# Structured rule: amateur-built / experimental aircraft
+# (homebuilt = Y or category indicates experimental/homebuilt)
+# depose_design_struct = 1 means “structured fields indicate elevated design-related potential.”
+
+fact["depose_design_struct"] = (
+    (fact["homebuilt"] == "Y") |
+    (fact["acft_category"].isin(["UNK", "ULTR", "WSFT", "GYRO", "PPAR"]))
+).astype(int)
+
+print(fact["depose_design_struct"].value_counts())
+print(f"Design (struct) rate: {fact['depose_design_struct'].mean():.1%}")
+
+#C32 — depose_equipment_struct
+# Structured rule: turbine engine
+# Proxy for elevated equipment-related potential
+
+turbine_types = ["TF", "TP", "TS", "TJ", "GTFN"]
+
+fact["depose_equipment_struct"] = (
+    fact["eng_type"].isin(turbine_types)
+).astype(int)
+
+print(fact["depose_equipment_struct"].value_counts())
+print(f"Equipment (struct) rate: {fact['depose_equipment_struct'].mean():.1%}")
+
+#C33 — depose_procedures_struct
+# Structured rule: Part 91 (general aviation)
+# Proxy for elevated procedures-related potential
+# (less organizational procedural oversight than Part 121/135)
+
+fact["depose_procedures_struct"] = (
+    fact["far_part"] == "091"
+).astype(int)
+
+print(fact["depose_procedures_struct"].value_counts())
+print(f"Procedures (struct) rate: {fact['depose_procedures_struct'].mean():.1%}")
+
+#C34 — depose_operators_struct
+# Structured rule: no pilot record or homebuilt
+# Proxy for elevated operators-related potential
+# (homebuilt often involves owner-operator; missing pilot record is a coverage gap)
+
+fact["depose_operators_struct"] = (
+    (fact["has_pilot"] == False) |
+    (fact["homebuilt"] == "Y")
+).astype(int)
+
+print(fact["depose_operators_struct"].value_counts())
+print(f"Operators (struct) rate: {fact['depose_operators_struct'].mean():.1%}")
+
+#C35 — depose_supplies_struct
+# Structured rule: none available from current fields
+# Supplies and materials (fuel quality, parts, fluids) are rarely coded
+# in the structured tables. Set to 0; Narrative pass will populate when text supports it.
+
+fact["depose_supplies_struct"] = 0
+
+print(fact["depose_supplies_struct"].value_counts())
+print("Supplies (struct) rate: 0.0% (no structured proxy)")
+
+#C36 — depose_environment_struct
+# Structured rule: IMC or night/dark lighting conditions
+# Proxy for elevated environment-related potential
+
+fact["depose_environment_struct"] = (
+    (fact["wx_cond_basic"] == "IMC") |
+    (fact["light_cond"].isin(["NITE", "NDRK", "DUSK", "DAWN"]))
+).astype(int)
+
+print(fact["depose_environment_struct"].value_counts())
+print(f"Environment (struct) rate: {fact['depose_environment_struct'].mean():.1%}")
+
+#C37 — interactive_complexity
+# Simple additive score (0–4) from structured proxies
+# Higher = more potential for unanticipated interactions
+
+fact["interactive_complexity"] = (
+    (fact["depose_design_struct"] == 1).astype(int) +          # experimental / homebuilt
+    (fact["eng_type"].isin(["TF", "TP", "TS", "TJ", "GTFN"])).astype(int) +  # turbine
+    (fact["num_eng"].fillna(0) >= 2).astype(int) +             # multi-engine
+    (fact["acft_category"].isin(["HELI", "GYRO"])).astype(int) # rotorcraft
+)
+
+print(fact["interactive_complexity"].value_counts().sort_index())
+print(f"Mean complexity: {fact['interactive_complexity'].mean():.2f}")
+
+#C38 — complexity score counts
+print(fact["interactive_complexity"].value_counts().sort_index())
+print(f"\nMax observed: {fact['interactive_complexity'].max()}")
+print(f"Share with score ? 2: {(fact['interactive_complexity'] >= 2).mean():.1%}")
+
+#C39 — tight_coupling
+# Simple additive score (0–3) from structured proxies
+# Higher = less recovery margin / tighter coupling
+
+fact["tight_coupling"] = (
+    (fact["wx_cond_basic"] == "IMC").astype(int) +                  # instrument conditions
+    (fact["light_cond"].isin(["NITE", "NDRK"])).astype(int) +       # night
+    (fact["far_part"].isin(["121", "135"])).astype(int)             # commercial ops (tighter schedule/sequence)
+)
+
+print(fact["tight_coupling"].value_counts().sort_index())
+print(f"Mean coupling: {fact['tight_coupling'].mean():.2f}")
+print(f"Share with score ≥ 2: {(fact['tight_coupling'] >= 2).mean():.1%}")
+
+#39.1 tight_coupling sense check
+print("Score distribution:")
+print(fact["tight_coupling"].value_counts().sort_index())
+print(f"\nMean: {fact['tight_coupling'].mean():.2f}")
+print(f"Share ≥ 2: {(fact['tight_coupling'] >= 2).mean():.1%}")
+
+print("\nBy component:")
+print(f"IMC: {(fact['wx_cond_basic'] == 'IMC').mean():.1%}")
+print(f"Night/dark: {fact['light_cond'].isin(['NITE','NDRK']).mean():.1%}")
+print(f"Part 121/135: {fact['far_part'].isin(['121','135']).mean():.1%}")
+
+print("\nHighest injury by coupling score:")
+print(fact.groupby("tight_coupling")["ev_highest_injury"].value_counts(normalize=True).unstack().round(3))
+
+#C40
+# Write full event table with structured tags
+struct_cols = [
+    "ev_id", "ev_date", "ev_city", "ev_state", "ev_country",
+    "latitude", "longitude", "apt_name",
+    "wx_cond_basic", "light_cond", "ev_highest_injury",
+    "inj_tot_f", "inj_tot_s", "inj_tot_m",
+    "Aircraft_Key", "acft_category", "homebuilt", "far_part",
+    "num_eng", "eng_type",
+    "finding_count", "has_cause_finding",
+    "crew_count", "has_pilot",
+    "narrative_count", "has_narrative",
+    "depose_design_struct",
+    "depose_equipment_struct",
+    "depose_procedures_struct",
+    "depose_operators_struct",
+    "depose_supplies_struct",
+    "depose_environment_struct",
+    "interactive_complexity",
+    "tight_coupling",
+]
+
+struct_cols = [c for c in struct_cols if c in fact.columns]
+fact_struct = fact[struct_cols].drop_duplicates(subset=["ev_id"], keep="last")
+
+out_path = "/content/drive/MyDrive/Colab Notebooks/avall_export/fact_structured.parquet"
+fact_struct.to_parquet(out_path, index=False)
+
+print(f"Wrote {len(fact_struct):,} rows × {len(fact_struct.columns)} columns")
+print(fact_struct.columns.tolist())
+
+#C41
+GROK_COMPLETE = True   # set True when the Grok cells are finished and should be skipped
+
+##C42 — multi-tag DEPOSE prompt
+
+if GROK_COMPLETE:
+    print("Grok cells already complete — skipping")
+else:
+  prompt_template = """
+  You are classifying an NTSB aviation accident narrative using Charles Perrow’s DEPOSE framework.
+
+  Return a JSON object with a 0 or 1 for each category.
+
+  Definitions and constraints:
+
+  - design: 1 only if the narrative explicitly describes a design flaw, control-layout/ergonomics problem, design limit, or a manufacturer/owner recommendation that changes a design feature. Do NOT tag for pilot actions, procedures, weather, maintenance, fuel issues, or simple component failures unless explicitly tied to a design flaw.
+  - equipment: 1 if the narrative describes failure of a physical component, engine, propeller, landing gear, avionics, or structural part.
+  - procedures: 1 if the narrative describes missing, incorrect, or poorly followed procedures, checklists, or prescribed methods.
+  - operators: 1 if the narrative describes pilot/crew actions, decisions, coordination, training, or experience issues.
+  - supplies: 1 if the narrative describes fuel quality/contamination, incorrect parts, fluids, or material problems.
+  - environment: 1 if the narrative describes weather, terrain, airport conditions, lighting, or other external factors.
+  - unanticipated_interaction: 1 if the narrative describes unexpected interactions between multiple failures or components.
+
+  Narrative:
+  {narrative}
+
+  Reply with only JSON in this exact form:
+  {{"design": 0, "equipment": 0, "procedures": 0, "operators": 0, "supplies": 0, "environment": 0, "unanticipated_interaction": 0}}
+  """
+  
+#C42— Grok multi-tag setup (if not already defined)
+
+if GROK_COMPLETE:
+    print("Grok cells already complete — skipping")
+else:
+  from google.colab import userdata
+  from openai import OpenAI
+  import json
+
+  grok_client = OpenAI(
+      api_key=userdata.get("GROK_API_KEY"),
+      base_url="https://api.x.ai/v1"
+  )
+
+  def grok_depose(narrative: str) -> dict:
+      default = {
+          "design": 0, "equipment": 0, "procedures": 0,
+          "operators": 0, "supplies": 0, "environment": 0,
+          "unanticipated_interaction": 0
+      }
+      if not isinstance(narrative, str) or len(narrative.strip()) < 50:
+          return default
+      try:
+          resp = grok_client.chat.completions.create(
+              model="grok-3",
+              messages=[{"role": "user", "content": prompt_template.format(narrative=narrative[:4000])}],
+              temperature=0
+          )
+          text = resp.choices[0].message.content.strip()
+          result = json.loads(text)
+          return {k: int(result.get(k, 0)) for k in default}
+      except Exception:
+          return default
+          
+# #C43 — 10-row Grok DEPOSE sample and tag
+
+# if GROK_COMPLETE:
+#     print("Grok cells already complete — skipping")
+# else:
+#   import time
+
+#   sample_grok = narratives[["ev_id", "narr_accp", "narr_accf", "narr_cause"]].dropna(how="all").sample(10, random_state=42).copy()
+
+#   print(f"sample_grok rows: {len(sample_grok)}")
+
+#   t0 = time.time()
+#   # highest-precision narrative available
+#   sample_grok["narr_for_grok"] = sample_grok["narr_accf"].fillna(sample_grok["narr_accp"]).fillna(sample_grok["narr_cause"])
+
+#   # record which level was used
+#   sample_grok["narr_precision"] = np.where(
+#       sample_grok["narr_accf"].notna() & (sample_grok["narr_accf"].str.len() > 0),
+#       "factual",
+#       np.where(
+#           sample_grok["narr_accp"].notna() & (sample_grok["narr_accp"].str.len() > 0),
+#           "preliminary",
+#           "cause"
+#       )
+#   )
+
+#   results = sample_grok["narr_for_grok"].apply(grok_depose)
+#   grok_df = pd.DataFrame(results.tolist(), index=sample_grok.index).add_suffix("_grok")
+
+#   sample_grok = sample_grok.join(grok_df)
+
+#   print(f"done in {time.time()-t0:.1f}s")
+#   print(sample_grok.filter(like="_grok").mean(numeric_only=True))
+#   sample_grok.head(2)
+
+# #C44
+# # join test events to narratives on ev_id, then count each narrative column by year
+
+# if GROK_COMPLETE:
+#     print("Grok cells already complete — skipping")
+# else:
+#   joined = events[["ev_id", "ev_date"]].merge(
+#       narratives[["ev_id", "narr_accp", "narr_accf", "narr_cause"]],
+#       on="ev_id",
+#       how="left"
+#   )
+
+#   joined["ev_date"] = pd.to_datetime(joined["ev_date"], errors="coerce")
+#   joined["ev_year"] = joined["ev_date"].dt.year
+
+#   # non-null and non-empty for each narrative level
+#   for col in ["narr_accp", "narr_accf", "narr_cause"]:
+#       joined[f"{col}_ok"] = joined[col].notna() & (joined[col].str.len() > 0)
+
+#   # highest-precision narrative available (same order as C42)
+#   joined["grok_exposure"] = joined["narr_accf_ok"] | joined["narr_accp_ok"] | joined["narr_cause_ok"]
+
+#   counts = (
+#       joined.groupby("ev_year")
+#       .agg(
+#           n_preliminary=("narr_accp_ok", "sum"),
+#           n_factual=("narr_accf_ok", "sum"),
+#           n_cause=("narr_cause_ok", "sum"),
+#           n_grok_exposure=("grok_exposure", "sum")
+#       )
+#       .reset_index()
+#       .sort_values("ev_year")
+#   )
+
+#   print(counts.to_string(index=False))
+#   print(f"\nTotal preliminary: {counts['n_preliminary'].sum():,}")
+#   print(f"Total factual:     {counts['n_factual'].sum():,}")
+#   print(f"Total cause:       {counts['n_cause'].sum():,}")
+#   print(f"Total Grok exposure: {counts['n_grok_exposure'].sum():,}")
+
+  # #C45
+# #  bring ev_date into sample_grok from events, then derive year/month
+
+# if GROK_COMPLETE:
+#     print("Grok cells already complete — skipping")
+# else:
+#   sample_grok = sample_grok.merge(
+#       events[["ev_id", "ev_date"]],
+#       on="ev_id",
+#       how="left"
+#   )
+
+#   sample_grok["ev_date"] = pd.to_datetime(sample_grok["ev_date"], errors="coerce")
+#   sample_grok["ev_year"] = sample_grok["ev_date"].dt.year
+#   sample_grok["ev_month"] = sample_grok["ev_date"].dt.month
+
+#   print(sample_grok.head(2))
+
+#C46
+# narratives 2021-forward with year and month
+
+if GROK_COMPLETE:
+    print("Grok cells already complete — skipping")
+else:
+  grok_pass2 = narratives.merge(
+      events[["ev_id", "ev_date"]],
+      on="ev_id",
+      how="left"
+  )
+
+  grok_pass2["ev_date"] = pd.to_datetime(grok_pass2["ev_date"], errors="coerce")
+  grok_pass2["ev_year"] = grok_pass2["ev_date"].dt.year
+  grok_pass2["ev_month"] = grok_pass2["ev_date"].dt.month
+
+  grok_pass2 = grok_pass2[grok_pass2["ev_year"] >= 2021].copy()
+
+  print(grok_pass2["ev_year"].value_counts().sort_index())
+  print(f"Rows: {len(grok_pass2)}")
+  
+#C47 — monthly DEPOSE with start/end
+if GROK_COMPLETE:
+    print("Grok cells already complete — skipping")
+else:
+
+  import time
+  from pathlib import Path
+
+  year = 2022
+  month_start = 1
+  month_end = 12          # inclusive
+
+  out_dir = Path("/content/drive/MyDrive/Colab Notebooks/avall_export/depose_monthly")
+  out_dir.mkdir(parents=True, exist_ok=True)
+
+  depose_cols = [
+      "design", "equipment", "procedures", "operators",
+      "supplies", "environment", "unanticipated_interaction"
+  ]
+
+  for m in range(month_start, month_end + 1):
+      path = out_dir / f"depose_{year}_{m:02d}.parquet"
+      if path.exists():
+          print(f"skip {year}-{m:02d}")
+          continue
+
+      mask = (grok_pass2["ev_year"] == year) & (grok_pass2["ev_month"] == m)
+      batch = grok_pass2.loc[mask].copy().reset_index(drop=True)
+      total = len(batch)
+
+      if total == 0:
+          print(f"empty {year}-{m:02d}")
+          continue
+
+      print(f"\n{year}-{m:02d}  start  ({total} rows)")
+      t0 = time.time()
+      results = []
+
+      for start in range(0, total, 50):
+          chunk = batch.iloc[start:start + 50].copy()
+          depose = chunk["narr_accp"].apply(grok_depose)
+          depose_df = pd.DataFrame(depose.tolist(), index=chunk.index)
+          for col in depose_cols:
+              chunk[f"{col}_grok"] = depose_df[col]
+          results.append(chunk)
+          done = start + len(chunk)
+          elapsed = time.time() - t0
+          print(f"  {done:>4} / {total}   {elapsed:6.1f}s")
+
+      out = pd.concat(results, ignore_index=True)
+      out.to_parquet(path, index=False)
+      print(f"saved {year}-{m:02d}  ({total} rows)  {time.time()-t0:.1f}s")
+      
+#C48
+
+from pathlib import Path
+import pandas as pd
+
+export_dir = Path("/content/drive/MyDrive/Colab Notebooks/avall_export/depose_monthly")
+
+# list what C44 already wrote
+files = sorted(export_dir.glob("*.*"))
+print(f"{len(files)} files found:")
+for f in files:
+    print(f"  {f.name}")
+    
+#C49
+from pathlib import Path
+import pandas as pd
+
+export_dir = Path("/content/drive/MyDrive/Colab Notebooks/avall_export/depose_monthly")
+# files = sorted(export_dir.glob("depose_2021_*.parquet"))
+files = sorted(export_dir.glob(f"depose_{year}_*.parquet"))
+
+df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+# out = export_dir.parent / "depose_2021.parquet"
+out = export_dir.parent / f"depose_{year}.parquet"
+df.to_parquet(out, index=False)
+
+print(f"{len(files)} files → {out}")
+print(f"rows: {len(df):,}")
+
+
+ #C49.1 after the concat
+print(df["ev_id"].nunique())
+print(df.groupby(df["ev_date"].dt.to_period("M")).size())
+
+ #C49.2
+df.duplicated(subset=["ev_id"]).sum()
+
+#C49.3
+df.filter(like="date").columns.tolist()
+
+#C49.4
+
+df = df.sort_values("lchg_date").drop_duplicates(subset="ev_id", keep="last")
+print(len(df))
+df.to_parquet(out, index=False)
+
+print(f"{len(files)} files → {out}")
+print(f"rows: {len(df):,}")
+
+#C49.5
+fact.head(3)
+
+#C50 — left join structured fact to 1215 Grok tags
+import pandas as pd
+
+fact = pd.read_parquet("/content/drive/MyDrive/Colab Notebooks/avall_export/fact_structured.parquet")
+# tags = pd.read_parquet("/content/drive/MyDrive/Colab Notebooks/avall_export/depose_2021.parquet")
+tags = pd.read_parquet(export_dir.parent / f"depose_{year}.parquet")
+
+merged = fact.merge(tags, on="ev_id", how="left", suffixes=("", "_narr"))
+
+tag_cols = [c for c in merged.columns if c in tags.columns and c != "ev_id"]
+
+#C51 — true Grok coverage
+grok_cols = [c for c in merged.columns if c.endswith("_grok")]
+print(f"Grok columns: {grok_cols}")
+print(f"Rows with any Grok value: {merged[grok_cols].notna().any(axis=1).sum():,}")
+print("Non-null rate by Grok column:")
+print(merged[grok_cols].notna().mean().round(3))
+print(
+    f"{year}+ rows with any Grok value: "
+    f"{merged.loc[merged['ev_date'] >= f'{year}-01-01', grok_cols].notna().any(axis=1).sum():,}"
+)
+
+#C52 — save the joined frame
+merged.to_parquet("/content/drive/MyDrive/Colab Notebooks/avall_export/fact_with_grok.parquet", index=False)
+print("Saved fact_with_grok.parquet")
+print(f"Shape: {merged.shape}")
+
+
+#C53
+# Correlation: structured DEPOSE vs Grok DEPOSE
+# (computed only on the rows Grok tagged)
+
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# adjust path if needed
+df = pd.read_parquet("/content/drive/MyDrive/Colab Notebooks/avall_export/fact_with_grok.parquet")
+
+struct = [
+    "depose_design_struct",
+    "depose_equipment_struct",
+    "depose_procedures_struct",
+    "depose_operators_struct",
+    "depose_supplies_struct",
+    "depose_environment_struct",
+]
+
+grok = [
+    "design_grok",
+    "equipment_grok",
+    "procedures_grok",
+    "operators_grok",
+    "supplies_grok",
+    "environment_grok",
+    "unanticipated_interaction_grok",
+]
+
+# keep only rows that have any Grok value
+mask = df[grok].notna().any(axis=1)
+sub = df.loc[mask, struct + grok].copy()
+
+# correlation matrix
+corr = sub.corr(method="pearson")
+
+# show the structured (rows) × Grok (cols) block
+block = corr.loc[struct, grok].round(3)
+print(block.to_string())
+
+# heatmap
+plt.figure(figsize=(10, 6))
+sns.heatmap(
+    block,
+    annot=True,
+    fmt=".2f",
+    cmap="RdBu_r",
+    center=0,
+    vmin=-0.3,
+    vmax=0.3,
+    linewidths=0.5,
+)
+plt.title("Structured DEPOSE vs Grok DEPOSE (Pearson)")
+plt.xlabel("Grok")
+plt.ylabel("Structured")
+plt.tight_layout()
+plt.show()
+
+#C54
+#  Enrichment of Grok over structured DEPOSE
+# (on the 1,215 rows Grok tagged)
+# Enrichment of Grok over structured DEPOSE
+# (on the 1,215 rows Grok tagged)
+
+import pandas as pd
+
+df = pd.read_parquet("/content/drive/MyDrive/Colab Notebooks/avall_export/fact_with_grok.parquet")
+
+pairs = [
+    ("design",      "depose_design_struct",      "design_grok"),
+    ("equipment",   "depose_equipment_struct",   "equipment_grok"),
+    ("procedures",  "depose_procedures_struct",  "procedures_grok"),
+    ("operators",   "depose_operators_struct",   "operators_grok"),
+    ("supplies",    "depose_supplies_struct",    "supplies_grok"),
+    ("environment", "depose_environment_struct", "environment_grok"),
+]
+
+# only the rows Grok tagged
+mask = df[[g for _, _, g in pairs]].notna().any(axis=1)
+sub = df.loc[mask].copy()
+
+rows = []
+for name, s_col, g_col in pairs:
+    s = sub[s_col].fillna(0).astype(int)
+    g = sub[g_col].fillna(0).astype(int)
+
+    both     = ((s == 1) & (g == 1)).sum()
+    struct_only = ((s == 1) & (g == 0)).sum()
+    grok_only   = ((s == 0) & (g == 1)).sum()
+    neither     = ((s == 0) & (g == 0)).sum()
+
+    rows.append({
+        "category": name,
+        "struct_only": struct_only,
+        "grok_only": grok_only,
+        "both": both,
+        "neither": neither,
+        "grok_adds": grok_only,          # pure enrichment
+        "total_with_signal": both + struct_only + grok_only,
+    })
+
+enrich = pd.DataFrame(rows).set_index("category")
+print(enrich.to_string())
+print()
+print(f"Rows in comparison: {mask.sum():,}")
+
+#C55
+enrich[["struct_only", "both", "grok_only"]].plot(
+    kind="bar",
+    stacked=True,
+    figsize=(8, 4),
+    color=["#4c72b0", "#55a868", "#c44e52"],
+)
+plt.title("DEPOSE signal: structured only / both / Grok only")
+plt.ylabel("events")
+plt.tight_layout()
+plt.show()
+

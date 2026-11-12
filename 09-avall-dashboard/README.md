@@ -1,6 +1,6 @@
 # AVALL Dashboard
 
-Public Power BI dashboard of NTSB aviation accidents (2008–2026) viewed through Charles Perrow’s Normal Accidents lens.
+Public Power BI dashboard of NTSB aviation accidents (2008–2026) viewed through Charles Perrow’s [Normal Accidents](https://en.wikipedia.org/wiki/Normal_Accidents) lens.
 
 ![AVALL rich map](avall-richmap.png)
 

@@ -1,4 +1,4 @@
-# AVALL — NTSB Aviation Accidents through Normal Accidents
+# AVALL — NTSB Aviation Accidents through [Normal Accidents](https://en.wikipedia.org/wiki/Normal_Accidents)
 Public-facing Power BI dashboard of NTSB aviation accidents (2008-01-01 to 2026-10-28) framed through Charles Perrow’s Normal Accidents lens.  
 Target: surface severe-injury risk, DEPOSE categories, and Contained versus Uncontained outcomes for public review.
 
