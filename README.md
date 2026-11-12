@@ -19,6 +19,7 @@ Certificate Program in Advanced Python: From Analytics to AI (Great Learning). C
 | [06-renewind-tuning](06-renewind-tuning/) | ReneWind generator-failure prediction (tuned XGBoost) |
 | [07-trade-ahead](07-trade-ahead/) | Trade&Ahead NYSE stock clustering (K-means and Hierarchical) |
 | [08-finsights-10k-rag](08-finsights-10k-rag/) | Finsights Grey Retrieval-Augmented Generation over five 2023 10-Ks (Chroma, Gradio) |
-| [09-avall-ntsb](09-avall-ntsb/) | AVALL — NTSB aviation accidents through a Perrow lens (Power BI) |
+| [09-avall-pipeline](avall-pipeline/) | AVALL — NTSB aviation accidents through a Perrow lens (modeling) |
+| [09-avall-dashboard](avall-dashboard/) | AVALL — Power BI dashboard (public) |
 
 Datasets are omitted from this repo.
