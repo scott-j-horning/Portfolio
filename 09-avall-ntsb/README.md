@@ -21,22 +21,22 @@ Pipeline and scored fact table ready for public dashboard.
 
 Structured features alone reach the highest discrimination. Unstructured Grok tags add little once the structured flags are present.
 
-![ROC curve — validation set](09-avall-ntsb/roc-auc.png)
+![ROC curve — validation set](roc-auc.png)
 
 At the locked 0.40 threshold the model catches most severe events while still generating a large number of false alarms on mild outcomes.
 
-![Validation Confusion Matrix — 0.40 threshold](09-avall-ntsb/confusion.ong.png)
+![Validation Confusion Matrix — 0.40 threshold](confusion.png)
 
 Most DEPOSE signal comes from structured fields. Grok-only tags are thin; agreement is strongest on Equipment, Operators, and Environment.
 
-![DEPOSE signal: structured only / both / Grok only](09-avall-ntsb/depose-signal.png)
+![DEPOSE signal: structured only / both / Grok only](depose-signal.png)
 
 Correlation between structured and Grok tags is modest. Highest alignment is on Equipment and Environment; Operators and Procedures show weaker or mixed relationships.
 
-![Structured DEPOSE vs Grok DEPOSE (Pearson)](09-avall-ntsb/correlation.png)
+![Structured DEPOSE vs Grok DEPOSE (Pearson)](correlation.png)
 
 Events occupy discrete cells in Perrow space. Severe outcomes appear across both low and high interactive-complexity / tight-coupling combinations; no single quadrant dominates.
 
-![Perrow space (val set) — hue = actual severe injury](09-avall-ntsb/correlation-coupling.png)
+![Perrow space (val set) — hue = actual severe injury](correlation-coupling.png)
 
 Full code notebook at 09-avall-ntsb/notebook.ipynb. Source extracts and intermediate parquet files omitted from this repository.
